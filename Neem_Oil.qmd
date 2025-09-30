@@ -1,0 +1,160 @@
+---
+title: "Neem Oil"
+format: html
+editor: visual
+---
+##Libraries
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(reshape2)
+
+```
+
+## Neem Oil Data
+```{r}
+data <- read.csv("/Users/rebeccavithayathil/Downloads/OSP.csv", stringsAsFactors = FALSE)
+head(data)
+t_data <- t(data)
+head(t_data)
+t_data <- as.data.frame(t_data)
+# Fix the column names using the first row
+colnames(t_data) <- t_data[1, ]
+# Remove that first row from the data
+t_data <- t_data[-1, ]
+if(!'year' %in% names(t_data)) {
+  t_data$year <- rownames(t_data)
+}
+head(t_data)
+
+# Reshape data to long format for plotting
+data_long <- t_data %>%
+  select(year, o, c) %>%
+  pivot_longer(cols = c(o, c), 
+               names_to = "treatment", 
+               values_to = "weight") %>%
+  mutate(weight = as.numeric(trimws(as.character(weight))))  # Trim spaces and convert to numeric
+head(data_long)
+```
+
+##Graph: Is Oil(o) or Cake(c) more effective?
+```{r}
+years <- 1:nrow(t_data)
+
+plot(years, as.numeric(t_data$o), type = "o", col = "blue", pch = 16, lwd = 2,
+     xlab = "Year", ylab = "Amount", ylim = range(c(as.numeric(t_data$o), as.numeric(t_data$c))),
+     main = "Oil vs Cake Effectiveness")
+
+lines(years, as.numeric(t_data$c), type = "o", col = "red", pch = 17, lwd = 2)
+
+legend("topleft", legend = c("Oil (o)", "Cake (c)"),
+       col = c("blue", "red"), pch = c(16, 17), lty = 1, lwd = 2)
+
+```
+```{r}
+ggplot(data_long, aes(x = treatment, y = weight, fill = treatment)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +
+  geom_jitter(width = 0.2, alpha = 0.5, size = 2.5) +
+  scale_fill_manual(values = c("c" = "#2E7D32", "o" = "#2E7D89"),
+                    labels = c("c" = "Neem Cake", "o" = "Neem Oil")) +
+  scale_x_discrete(labels = c("c" = "Neem Cake", "o" = "Neem Oil")) +
+  scale_y_continuous(breaks = seq(800, 1600, by = 100)) +
+  labs(title = "Distribution of Sweet Potato Yields by Neem Treatment",
+       x = "Treatment",
+       y = "Weight (pounds)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        legend.position = "none",
+        axis.text.y = element_text(size = 10),
+        panel.grid.minor = element_blank())
+```
+
+```{r}
+# Paired t-test to compare treatments
+# Convert to numeric and remove any spaces
+t_data$o_numeric <- as.numeric(trimws(as.character(t_data$o)))
+t_data$c_numeric <- as.numeric(trimws(as.character(t_data$c)))
+
+# Perform paired t-test
+t_test_result <- t.test(t_data$c_numeric, t_data$o_numeric, paired = TRUE)
+print(t_test_result)
+
+# Calculate the mean difference
+mean_diff <- mean(t_data$c_numeric - t_data$o_numeric)
+cat("\nMean difference (Cake - Neem Oil):", round(mean_diff, 2), "pounds\n")
+
+```
+
+```{r}
+# ===== CHECK ASSUMPTIONS FOR PAIRED T-TEST =====
+
+# Calculate differences for each pair
+differences <- t_data$c_numeric - t_data$o_numeric
+
+cat("\n===== CHECKING NORMALITY OF DIFFERENCES =====\n\n")
+
+# 1. Summary statistics of differences
+cat("Summary of differences:\n")
+print(summary(differences))
+cat("\nStandard deviation:", round(sd(differences), 2), "\n\n")
+
+# 2. Shapiro-Wilk test for normality
+# H0: data is normally distributed
+# If p-value > 0.05, we fail to reject H0 (data appears normal)
+shapiro_test <- shapiro.test(differences)
+cat("Shapiro-Wilk Normality Test:\n")
+print(shapiro_test)
+cat("\nInterpretation: ")
+if(shapiro_test$p.value > 0.05) {
+  cat("p-value =", round(shapiro_test$p.value, 4), 
+      "- Data appears normally distributed (assumption met)\n\n")
+} else {
+  cat("p-value =", round(shapiro_test$p.value, 4), 
+      "- Data may NOT be normally distributed (consider Wilcoxon test)\n\n")
+}
+
+# 3. Visual checks for normality
+par(mfrow = c(2, 2))  # Create 2x2 plot layout
+
+# Histogram with normal curve overlay
+hist(differences, 
+     main = "Histogram of Differences\n(Cake - Neem Oil)",
+     xlab = "Difference (pounds)",
+     col = "lightblue",
+     border = "black",
+     breaks = 10,
+     probability = TRUE)
+# Add normal curve
+curve(dnorm(x, mean = mean(differences), sd = sd(differences)),
+      add = TRUE, col = "red", lwd = 2)
+
+
+# Q-Q plot (most important visual check)
+qqnorm(differences, 
+       main = "Q-Q Plot of Differences",
+       pch = 19, 
+       col = "darkblue")
+qqline(differences, col = "red", lwd = 2)
+
+# Boxplot to check for outliers
+boxplot(differences, 
+        main = "Boxplot of Differences",
+        ylab = "Difference (pounds)",
+        col = "lightgreen",
+        border = "darkgreen")
+abline(h = 0, col = "red", lty = 2, lwd = 2)
+
+# Density plot
+plot(density(differences),
+     main = "Density Plot of Differences",
+     xlab = "Difference (pounds)",
+     lwd = 2,
+     col = "darkblue")
+polygon(density(differences), col = rgb(0, 0, 1, 0.3), border = "darkblue")
+abline(v = mean(differences), col = "red", lty = 2, lwd = 2)
+
+
+par(mfrow = c(1, 1))  # Reset plot layout
+```
+##Source: used claude.ai to help with coding errors and used it for t-test assumption code
